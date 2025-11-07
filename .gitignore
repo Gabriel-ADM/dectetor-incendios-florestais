@@ -1,0 +1,10 @@
+# Executable files
+program
+main
+*.exe
+
+# Object files
+*.o
+
+# Common editor backup files
+*~
