@@ -2,7 +2,7 @@
 #include <stdlib.h>
 
 #define SMALL_GRID 3
-#define WHOLE_GRID 30
+#define WHOLE_GRID 10
 
 void printCharGreenBg(char character)
 {
