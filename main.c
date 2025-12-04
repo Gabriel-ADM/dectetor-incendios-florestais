@@ -8,6 +8,9 @@
 #define SMALL_GRID 3
 #define WHOLE_GRID 10
 
+// global var to control mutual exclusion
+pthread_mutex_t grid_mutex = PTHREAD_MUTEX_INITIALIZER;
+
 void printColoredChar(char character, char *color)
 {
     if (!strcmp(color, "green"))
@@ -68,18 +71,28 @@ void *sensorThread(void *arg)
     while (1)
     {
         sleep(1);
+        // locks matrix from another thread before reading it
+        pthread_mutex_lock(&grid_mutex);
+
         for (size_t i = 0; i < SMALL_GRID; i++)
         {
             for (size_t j = 0; j < SMALL_GRID; j++)
             {
                 if (sensor->matrix[i][j] == '@' && (i == 1 && j == 1))
+                {
+                    // prevent deadlock
+                    pthread_mutex_unlock(&grid_mutex);
                     pthread_cancel(sensor->threadId);
+                    return NULL;
+                }
                 else if (sensor->matrix[i][j] == '@')
                 {
                     // function to send signal to neighbours
                 }
             }
         }
+        // free thread after checking the matrix content
+        pthread_mutex_unlock(&grid_mutex);
     }
 
     return NULL;
@@ -165,21 +178,25 @@ void printSensorGrid(Sensor *grid[WHOLE_GRID][WHOLE_GRID])
 
 void fire(Sensor *grid[WHOLE_GRID][WHOLE_GRID])
 {
+    // prevent deadlock from main thread with sensor threads
+    pthread_mutex_lock(&grid_mutex);
     const int MAX_COORD = SMALL_GRID * WHOLE_GRID;
-
+    
     int global_row = rand() % MAX_COORD;
     int global_col = rand() % MAX_COORD;
-
+    
     // int division to get the grid coordinate
     int grid_row = global_row / SMALL_GRID;
     int grid_col = global_col / SMALL_GRID;
-
+    
     // getting the module results gives us a number from 0 to 2
     int sensor_row = global_row % SMALL_GRID;
     int sensor_col = global_col % SMALL_GRID;
-
+    
     // put fire on cell ('@')
-    grid[grid_row][grid_col]->matrix[sensor_row][sensor_col] = '@';
+    grid[grid_row][grid_col]->matrix[sensor_col][sensor_row] = '@';
+    
+    pthread_mutex_unlock(&grid_mutex);
 }
 
 int main(int argc, char const *argv[])
@@ -198,9 +215,9 @@ int main(int argc, char const *argv[])
         system("clear");
         printSensorGrid(sensors);
         sleep(1);
-        fire_timer+=5;
+        fire_timer += 5;
     }
-    
+
     freeGrid(sensors);
     return 0;
 }
