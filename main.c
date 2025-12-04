@@ -120,18 +120,6 @@ Sensor initiateGrid(Sensor *grid[WHOLE_GRID][WHOLE_GRID])
     }
 }
 
-// necessary so the main thread can wait for the execution of the children threads
-void joinSensorThreads(Sensor *grid[WHOLE_GRID][WHOLE_GRID])
-{
-    for (size_t i = 0; i < WHOLE_GRID; i++)
-    {
-        for (size_t j = 0; j < WHOLE_GRID; j++)
-        {
-            pthread_join(grid[i][j]->threadId, NULL);
-        }
-    }
-}
-
 void freeGrid(Sensor *grid[WHOLE_GRID][WHOLE_GRID])
 {
     for (size_t i = 0; i < WHOLE_GRID; i++)
@@ -200,12 +188,19 @@ int main(int argc, char const *argv[])
 
     Sensor *sensors[WHOLE_GRID][WHOLE_GRID];
     initiateGrid(sensors);
-    joinSensorThreads(sensors);
 
-    fire(sensors);
+    int fire_timer = 0;
+    while (1)
+    {
+        if (fire_timer % 5 == 0)
+            fire(sensors);
 
-    printSensorGrid(sensors);
-
+        system("clear");
+        printSensorGrid(sensors);
+        sleep(1);
+        fire_timer+=5;
+    }
+    
     freeGrid(sensors);
     return 0;
 }
