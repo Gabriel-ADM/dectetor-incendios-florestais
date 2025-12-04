@@ -1,4 +1,4 @@
-# PROJETO: Simulador de um Sistema Detector de Incêndios Florestais
+ PROJETO: Simulador de um Sistema Detector de Incêndios Florestais
 
 ================================================================================
 SISTEMAS OPERACIONAIS - 2025/2
