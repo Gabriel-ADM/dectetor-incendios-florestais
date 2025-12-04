@@ -1,1 +1,0 @@
-# dectetor-incendios-florestais
