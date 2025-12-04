@@ -181,7 +181,7 @@ void fire(Sensor *grid[WHOLE_GRID][WHOLE_GRID])
     // prevent deadlock from main thread with sensor threads
     pthread_mutex_lock(&grid_mutex);
     const int MAX_COORD = SMALL_GRID * WHOLE_GRID;
-    
+
     int global_row = rand() % MAX_COORD;
     int global_col = rand() % MAX_COORD;
     
@@ -213,7 +213,9 @@ int main(int argc, char const *argv[])
             fire(sensors);
 
         system("clear");
+        pthread_mutex_lock(&grid_mutex);
         printSensorGrid(sensors);
+        pthread_mutex_unlock(&grid_mutex);
         sleep(1);
         fire_timer += 5;
     }
