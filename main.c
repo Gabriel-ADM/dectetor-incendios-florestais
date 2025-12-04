@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <time.h>
 #include <string.h>
+#include <pthread.h>
+#include <unistd.h>
 
 #define SMALL_GRID 3
 #define WHOLE_GRID 10
@@ -25,6 +27,7 @@ void printColoredChar(char character, char *color)
 typedef struct Sensor
 {
     int id;
+    pthread_t threadId;
     char matrix[SMALL_GRID][SMALL_GRID];
     int posX, posY;
 } Sensor;
@@ -57,6 +60,31 @@ Sensor *initiateSensor(int id, int positionX, int positionY)
     return sensor;
 }
 
+void *sensorThread(void *arg)
+{
+    // cast arg from void to Sensor
+    Sensor *sensor = (Sensor *)arg;
+
+    while (1)
+    {
+        sleep(1);
+        for (size_t i = 0; i < SMALL_GRID; i++)
+        {
+            for (size_t j = 0; j < SMALL_GRID; j++)
+            {
+                if (sensor->matrix[i][j] == '@' && (i == 1 && j == 1))
+                    pthread_cancel(sensor->threadId);
+                else if (sensor->matrix[i][j] == '@')
+                {
+                    // function to send signal to neighbours
+                }
+            }
+        }
+    }
+
+    return NULL;
+}
+
 void printSensor(Sensor *sensor)
 {
     for (int i = 0; i < SMALL_GRID; i++)
@@ -77,7 +105,29 @@ Sensor initiateGrid(Sensor *grid[WHOLE_GRID][WHOLE_GRID])
         for (size_t j = 0; j < WHOLE_GRID; j++)
         {
             id++;
+
             grid[i][j] = initiateSensor(id, i, j);
+
+            Sensor *sensorPtr = grid[i][j];
+            // thread adress, NULL (lib conv), function the thread is going to execute, arg to receive cast
+            int status = pthread_create(&sensorPtr->threadId, NULL, sensorThread, (void *)sensorPtr);
+
+            if (status != 0)
+            {
+                printf("Error initiating thread, id: %d\n", id);
+            }
+        }
+    }
+}
+
+// necessary so the main thread can wait for the execution of the children threads
+void joinSensorThreads(Sensor *grid[WHOLE_GRID][WHOLE_GRID])
+{
+    for (size_t i = 0; i < WHOLE_GRID; i++)
+    {
+        for (size_t j = 0; j < WHOLE_GRID; j++)
+        {
+            pthread_join(grid[i][j]->threadId, NULL);
         }
     }
 }
@@ -150,6 +200,7 @@ int main(int argc, char const *argv[])
 
     Sensor *sensors[WHOLE_GRID][WHOLE_GRID];
     initiateGrid(sensors);
+    joinSensorThreads(sensors);
 
     fire(sensors);
 
