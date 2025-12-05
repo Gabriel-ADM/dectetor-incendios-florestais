@@ -38,8 +38,9 @@ typedef struct CentralControl
     pthread_mutex_t lock;
     pthread_cond_t cond;  // controlar funcionamento da central
 
-    int lastCordX; 
-    int lastCordY;
+    int lastFireCordX; 
+    int lastFireCordY;
+    char lastFireTime[9];
 } CentralControl;
 
 CentralControl centralControl; // declaração global da central de controle
@@ -377,11 +378,19 @@ void *centralThread(void *arg)
         // process alert if not duplicated
         int currentFireX = centralControl.inbox.cordx;
         int currentFireY = centralControl.inbox.cordy;
-        if (currentFireX != centralControl.lastCordX || currentFireY != centralControl.lastCordY)
+        char *currentFireTime = centralControl.inbox.time;
+        int duplicateEvent =  (
+            currentFireX == centralControl.lastFireCordX && 
+            currentFireY == centralControl.lastFireCordY &&
+            !strcmp(currentFireTime, centralControl.lastFireTime));
+        int isOldLog = (strcmp(currentFireTime, centralControl.lastFireTime) < 0);
+        
+        if (!duplicateEvent && !isOldLog)
         {
-            // update last fire coord reported
-            centralControl.lastCordX = currentFireX;
-            centralControl.lastCordY = currentFireY;
+            // update last fire coord and time reported
+            centralControl.lastFireCordX = currentFireX;
+            centralControl.lastFireCordY = currentFireY;
+            strcpy(centralControl.lastFireTime, currentFireTime);
 
             fprintf(arquivo,"Fogo detectado\t Id de Sensor: %d at (%d,%d) as %s\n",
                    centralControl.inbox.sensor_id,
@@ -416,8 +425,9 @@ int main(int argc, char const *argv[])
     pthread_mutex_init(&centralControl.lock, NULL);
     pthread_cond_init(&centralControl.cond, NULL);
     centralControl.alert_active = 0;
-    centralControl.lastCordX = -1;
-    centralControl.lastCordY = -1;
+    centralControl.lastFireCordX = -1;
+    centralControl.lastFireCordY = -1;
+    strcpy(centralControl.lastFireTime,"00:00:00");
     
     pthread_mutex_init(&firefighter.lock, NULL);
     pthread_cond_init(&firefighter.cond, NULL);
