@@ -71,14 +71,17 @@ void sendMessage(Sensor *vizinho, Message msg)
     if(vizinho == NULL) //caso esteja na borda da grid
         return;
 
-    pthread_mutex_lock(&vizinho->lock);
-
-    if(vizinho->inbox.active == 0)
+    // trylock utilized cause thread can lock each neighbor while trying to send messages
+    if(pthread_mutex_trylock(&vizinho->lock) == 0)
     {
-        vizinho->inbox = msg;
-        //printf("Sensor %d avisou Sensor %d sobre fogo!\n", msg.sensor_id, vizinho->id);
+        if(vizinho->inbox.active == 0)
+        {
+            vizinho->inbox = msg;
+            //printf("Sensor %d avisou Sensor %d sobre fogo!\n", msg.sensor_id, vizinho->id);
+        }
+        pthread_mutex_unlock(&vizinho->lock);
     }
-    pthread_mutex_unlock(&vizinho->lock);
+
 }
 
 Sensor *initiateSensor(int id, int positionX, int positionY, int cordX, int cordY)
