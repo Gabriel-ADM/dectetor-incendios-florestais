@@ -312,11 +312,11 @@ void fire(Sensor *grid[WHOLE_GRID][WHOLE_GRID])
     int sensor_col = global_col % SMALL_GRID;
 
     
-    pthread_mutex_lock(&grid[grid_row][grid_col]->lock);
+    pthread_mutex_lock(&grid[grid_col][grid_row]->lock);
     // put fire on cell ('@')
     grid[grid_col][grid_row]->matrix[sensor_row][sensor_col] = '@';
     
-    pthread_mutex_unlock(&grid[grid_row][grid_col]->lock);
+    pthread_mutex_unlock(&grid[grid_col][grid_row]->lock);
 }
 
 void *firefighterThread(void *arg)
