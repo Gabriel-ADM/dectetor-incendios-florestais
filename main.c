@@ -8,6 +8,12 @@
 #define SMALL_GRID 3
 #define WHOLE_GRID 10
 
+#define MAX_LOG_SIZE 100
+#define MAX_LOG_ENTRIES 100000
+char logged_messages[MAX_LOG_ENTRIES][MAX_LOG_SIZE];
+int log_count = 0;
+pthread_mutex_t log_mutex;
+
 typedef struct Message
 {
     int sensor_id;
@@ -38,9 +44,6 @@ typedef struct CentralControl
     pthread_mutex_t lock;
     pthread_cond_t cond;  // controlar funcionamento da central
 
-    int lastFireCordX; 
-    int lastFireCordY;
-    char lastFireTime[9];
 } CentralControl;
 
 CentralControl centralControl; // declaração global da central de controle
@@ -358,6 +361,21 @@ void *firefighterThread(void *arg)
     return NULL;
 }
 
+int isLogMessageDuplicated(const char *message_to_check)
+{
+    pthread_mutex_lock(&log_mutex);
+    for (int i = 0; i < log_count; i++)
+    {
+        if (strcmp(logged_messages[i], message_to_check) == 0)
+        {
+            pthread_mutex_unlock(&log_mutex);
+            return 1; // duplicate
+        }
+    }
+    pthread_mutex_unlock(&log_mutex);
+    return 0; // not duplicate
+}
+
 void *centralThread(void *arg)
 {
     FILE *arquivo = fopen("incendios.log", "a");
@@ -375,29 +393,23 @@ void *centralThread(void *arg)
             pthread_cond_wait(&centralControl.cond, &centralControl.lock);
         }
 
+        char currentLog[MAX_LOG_SIZE];
         // process alert if not duplicated
-        int currentFireX = centralControl.inbox.cordx;
-        int currentFireY = centralControl.inbox.cordy;
-        char *currentFireTime = centralControl.inbox.time;
-        int duplicateEvent =  (
-            currentFireX == centralControl.lastFireCordX && 
-            currentFireY == centralControl.lastFireCordY &&
-            !strcmp(currentFireTime, centralControl.lastFireTime));
-        int isOldLog = (strcmp(currentFireTime, centralControl.lastFireTime) < 0);
-        
-        if (!duplicateEvent && !isOldLog)
-        {
-            // update last fire coord and time reported
-            centralControl.lastFireCordX = currentFireX;
-            centralControl.lastFireCordY = currentFireY;
-            strcpy(centralControl.lastFireTime, currentFireTime);
+        snprintf(currentLog,MAX_LOG_SIZE,"Fogo detectado\t Id de Sensor: %d at (%d,%d) as %s\n",
+            centralControl.inbox.sensor_id,
+            centralControl.inbox.cordx,
+            centralControl.inbox.cordy,
+            centralControl.inbox.time);
 
-            fprintf(arquivo,"Fogo detectado\t Id de Sensor: %d at (%d,%d) as %s\n",
-                   centralControl.inbox.sensor_id,
-                   currentFireX,
-                   currentFireY,
-                   centralControl.inbox.time);
+        if (!isLogMessageDuplicated(currentLog))
+        {
+            fprintf(arquivo,"%s", currentLog);
             fflush(arquivo);
+            // adds log in logs list in case it's not duplicated
+            pthread_mutex_lock(&log_mutex);
+            strncpy(logged_messages[log_count], currentLog, MAX_LOG_SIZE - 1);
+            log_count++;
+            pthread_mutex_unlock(&log_mutex);
     
             pthread_mutex_lock(&firefighter.lock);
             if (firefighter.task_active == 0)
@@ -425,9 +437,8 @@ int main(int argc, char const *argv[])
     pthread_mutex_init(&centralControl.lock, NULL);
     pthread_cond_init(&centralControl.cond, NULL);
     centralControl.alert_active = 0;
-    centralControl.lastFireCordX = -1;
-    centralControl.lastFireCordY = -1;
-    strcpy(centralControl.lastFireTime,"00:00:00");
+
+    pthread_mutex_init(&log_mutex, NULL);
     
     pthread_mutex_init(&firefighter.lock, NULL);
     pthread_cond_init(&firefighter.cond, NULL);
