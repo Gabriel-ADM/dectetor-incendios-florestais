@@ -42,6 +42,17 @@ typedef struct CentralControl
 
 CentralControl centralControl; // declaração global da central de controle
 
+typedef struct Firefighter
+{
+    Message fireLoc;
+    int task_active;
+    pthread_mutex_t lock;
+    pthread_cond_t cond;  // controlar funcionamento de bombeiro
+
+} Firefighter;
+Firefighter firefighter; // declaração global de controle de bombeiro
+
+
 void printColoredChar(char character, char *color)
 {
     if (!strcmp(color, "green"))
@@ -140,8 +151,8 @@ void *sensorThread(void *arg)
                     // function to send signal to neighbours
                     Message msg;
                     msg.sensor_id = sensor->id;
-                    msg.cordx = (sensor->cordX * SMALL_GRID) + i;
-                    msg.cordy = (sensor->cordY * SMALL_GRID) + j;
+                    msg.cordx = (sensor->cordX * SMALL_GRID) + j;
+                    msg.cordy = (sensor->cordY * SMALL_GRID) + i;
                     getCurrentTime(msg.time);
                     msg.active = 1;
 
@@ -303,9 +314,45 @@ void fire(Sensor *grid[WHOLE_GRID][WHOLE_GRID])
     
     pthread_mutex_lock(&grid[grid_row][grid_col]->lock);
     // put fire on cell ('@')
-    grid[grid_row][grid_col]->matrix[sensor_row][sensor_col] = '@';
+    grid[grid_col][grid_row]->matrix[sensor_row][sensor_col] = '@';
     
     pthread_mutex_unlock(&grid[grid_row][grid_col]->lock);
+}
+
+void *firefighterThread(void *arg)
+{
+    while (1)
+    {
+        pthread_mutex_lock(&firefighter.lock);
+        while (!firefighter.task_active)
+            pthread_cond_wait(&firefighter.cond, &firefighter.lock);
+        
+        int fireX = firefighter.fireLoc.cordx;
+        int fireY = firefighter.fireLoc.cordy;
+        pthread_mutex_unlock(&firefighter.lock);
+        sleep(2);
+
+        int grid_col = fireX / SMALL_GRID;
+        int grid_row = fireY / SMALL_GRID;
+        int sensor_col = fireX % SMALL_GRID;
+        int sensor_row = fireY % SMALL_GRID;
+
+        Sensor *sensorOnFire = sensors[grid_col][grid_row];
+        pthread_mutex_lock(&sensorOnFire->lock);
+        if (sensorOnFire->matrix[sensor_row][sensor_col] == '@')
+        {
+            sensorOnFire->matrix[sensor_row][sensor_col] = '%';
+            // printf("Fogo apagado em (Col: %d, Lin: %d).\n", fireX, fireY);
+        }
+        
+        pthread_mutex_unlock(&sensorOnFire->lock);
+
+        // restart firefighter
+        pthread_mutex_lock(&firefighter.lock);
+        firefighter.task_active = 0;
+        pthread_mutex_unlock(&firefighter.lock);
+    }
+    return NULL;
 }
 
 void *centralThread(void *arg)
@@ -327,9 +374,18 @@ void *centralThread(void *arg)
                centralControl.inbox.cordx,
                centralControl.inbox.cordy,
                centralControl.inbox.time);
+        fflush(arquivo);
 
+        pthread_mutex_lock(&firefighter.lock);
+        if (firefighter.task_active == 0)
+        {
+            firefighter.fireLoc = centralControl.inbox;
+            firefighter.task_active = 1;
+            pthread_cond_signal(&firefighter.cond);
+        }
+        pthread_mutex_unlock(&firefighter.lock);
+        
         centralControl.alert_active = 0; 
-
         pthread_mutex_unlock(&centralControl.lock);
     }
     fclose(arquivo);
@@ -345,9 +401,14 @@ int main(int argc, char const *argv[])
     pthread_mutex_init(&centralControl.lock, NULL);
     pthread_cond_init(&centralControl.cond, NULL);
     centralControl.alert_active = 0;
+    
+    pthread_mutex_init(&firefighter.lock, NULL);
+    pthread_cond_init(&firefighter.cond, NULL);
+    firefighter.task_active = 0;
 
-    pthread_t central;
+    pthread_t central, firefighter;
     pthread_create(&central, NULL, centralThread, NULL);
+    pthread_create(&firefighter, NULL, firefighterThread, NULL);
 
 
     initiateGrid(sensors);
