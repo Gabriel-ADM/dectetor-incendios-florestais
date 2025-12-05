@@ -38,6 +38,8 @@ typedef struct CentralControl
     pthread_mutex_t lock;
     pthread_cond_t cond;  // controlar funcionamento da central
 
+    int lastCordX; 
+    int lastCordY;
 } CentralControl;
 
 CentralControl centralControl; // declaração global da central de controle
@@ -357,7 +359,11 @@ void *firefighterThread(void *arg)
 
 void *centralThread(void *arg)
 {
-    FILE *arquivo = fopen("incendios.log", "w");
+    FILE *arquivo = fopen("incendios.log", "a");
+    if (arquivo == NULL) {
+        perror("Error opening incendios.log");
+        return NULL;
+    }
 
     while (1)
     {
@@ -368,22 +374,31 @@ void *centralThread(void *arg)
             pthread_cond_wait(&centralControl.cond, &centralControl.lock);
         }
 
-        // process alert
-        fprintf(arquivo,"Fogo detectado %d at (%d,%d) at time %s\n",
-               centralControl.inbox.sensor_id,
-               centralControl.inbox.cordx,
-               centralControl.inbox.cordy,
-               centralControl.inbox.time);
-        fflush(arquivo);
-
-        pthread_mutex_lock(&firefighter.lock);
-        if (firefighter.task_active == 0)
+        // process alert if not duplicated
+        int currentFireX = centralControl.inbox.cordx;
+        int currentFireY = centralControl.inbox.cordy;
+        if (currentFireX != centralControl.lastCordX || currentFireY != centralControl.lastCordY)
         {
-            firefighter.fireLoc = centralControl.inbox;
-            firefighter.task_active = 1;
-            pthread_cond_signal(&firefighter.cond);
+            // update last fire coord reported
+            centralControl.lastCordX = currentFireX;
+            centralControl.lastCordY = currentFireY;
+
+            fprintf(arquivo,"Fogo detectado\t Id de Sensor: %d at (%d,%d) as %s\n",
+                   centralControl.inbox.sensor_id,
+                   currentFireX,
+                   currentFireY,
+                   centralControl.inbox.time);
+            fflush(arquivo);
+    
+            pthread_mutex_lock(&firefighter.lock);
+            if (firefighter.task_active == 0)
+            {
+                firefighter.fireLoc = centralControl.inbox;
+                firefighter.task_active = 1;
+                pthread_cond_signal(&firefighter.cond);
+            }
+            pthread_mutex_unlock(&firefighter.lock);
         }
-        pthread_mutex_unlock(&firefighter.lock);
         
         centralControl.alert_active = 0; 
         pthread_mutex_unlock(&centralControl.lock);
@@ -401,6 +416,8 @@ int main(int argc, char const *argv[])
     pthread_mutex_init(&centralControl.lock, NULL);
     pthread_cond_init(&centralControl.cond, NULL);
     centralControl.alert_active = 0;
+    centralControl.lastCordX = -1;
+    centralControl.lastCordY = -1;
     
     pthread_mutex_init(&firefighter.lock, NULL);
     pthread_cond_init(&firefighter.cond, NULL);
